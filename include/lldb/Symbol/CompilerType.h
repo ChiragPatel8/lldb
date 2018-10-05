@@ -36,13 +36,17 @@ public:
   //----------------------------------------------------------------------
   // Constructors and Destructors
   //----------------------------------------------------------------------
-  CompilerType(TypeSystem *type_system, lldb::opaque_compiler_type_t type);
-  CompilerType(clang::ASTContext *ast_context, clang::QualType qual_type);
+  CompilerType(TypeSystem *type_system, lldb::opaque_compiler_type_t type,
+               lldb::ByteOrder byte_order = lldb::eByteOrderInvalid);
+  CompilerType(clang::ASTContext *ast_context, clang::QualType qual_type,
+               lldb::ByteOrder byte_order = lldb::eByteOrderInvalid);
 
   CompilerType(const CompilerType &rhs)
-      : m_type(rhs.m_type), m_type_system(rhs.m_type_system) {}
+      : m_type(rhs.m_type), m_type_system(rhs.m_type_system),
+        m_byte_order(rhs.m_byte_order) {}
 
-  CompilerType() : m_type(nullptr), m_type_system(nullptr) {}
+  CompilerType() : m_type(nullptr), m_type_system(nullptr),
+                   m_byte_order(lldb::eByteOrderInvalid) {}
 
   ~CompilerType();
 
@@ -53,6 +57,7 @@ public:
   const CompilerType &operator=(const CompilerType &rhs) {
     m_type = rhs.m_type;
     m_type_system = rhs.m_type_system;
+    m_byte_order = rhs.m_byte_order;
     return *this;
   }
 
@@ -188,6 +193,11 @@ public:
 
   unsigned GetTypeQualifiers() const;
 
+  lldb::ByteOrder GetByteOrder() const { return m_byte_order; }
+
+  void SetByteOrder(lldb::ByteOrder byte_order) {
+    m_byte_order = byte_order;
+  }
   //----------------------------------------------------------------------
   // Creating related types
   //----------------------------------------------------------------------
@@ -421,11 +431,13 @@ public:
   void Clear() {
     m_type = nullptr;
     m_type_system = nullptr;
+    m_byte_order = lldb::eByteOrderInvalid;
   }
 
 private:
   lldb::opaque_compiler_type_t m_type;
   TypeSystem *m_type_system;
+  mutable lldb::ByteOrder m_byte_order;
 };
 
 bool operator==(const CompilerType &lhs, const CompilerType &rhs);

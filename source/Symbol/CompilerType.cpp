@@ -30,12 +30,16 @@ using namespace lldb;
 using namespace lldb_private;
 
 CompilerType::CompilerType(TypeSystem *type_system,
-                           lldb::opaque_compiler_type_t type)
-    : m_type(type), m_type_system(type_system) {}
+                           lldb::opaque_compiler_type_t type,
+                           ByteOrder byte_order)
+    : m_type(type), m_type_system(type_system),
+      m_byte_order(byte_order) {}
 
-CompilerType::CompilerType(clang::ASTContext *ast, clang::QualType qual_type)
+CompilerType::CompilerType(clang::ASTContext *ast, clang::QualType qual_type,
+                            ByteOrder byte_order)
     : m_type(qual_type.getAsOpaquePtr()),
-      m_type_system(ClangASTContext::GetASTContext(ast)) {
+      m_type_system(ClangASTContext::GetASTContext(ast)),
+      m_byte_order(byte_order) {
 #ifdef LLDB_CONFIGURATION_DEBUG
   if (m_type)
     assert(m_type_system != nullptr);
@@ -340,12 +344,14 @@ void CompilerType::SetCompilerType(TypeSystem *type_system,
                                    lldb::opaque_compiler_type_t type) {
   m_type_system = type_system;
   m_type = type;
+  m_byte_order = eByteOrderInvalid;
 }
 
 void CompilerType::SetCompilerType(clang::ASTContext *ast,
                                    clang::QualType qual_type) {
   m_type_system = ClangASTContext::GetASTContext(ast);
   m_type = qual_type.getAsOpaquePtr();
+  m_byte_order = eByteOrderInvalid;
 }
 
 unsigned CompilerType::GetTypeQualifiers() const {
@@ -1071,11 +1077,13 @@ bool CompilerType::WriteToMemory(lldb_private::ExecutionContext *exe_ctx,
 bool lldb_private::operator==(const lldb_private::CompilerType &lhs,
                               const lldb_private::CompilerType &rhs) {
   return lhs.GetTypeSystem() == rhs.GetTypeSystem() &&
-         lhs.GetOpaqueQualType() == rhs.GetOpaqueQualType();
+         lhs.GetOpaqueQualType() == rhs.GetOpaqueQualType() &&
+         lhs.GetByteOrder() == rhs.GetByteOrder();
 }
 
 bool lldb_private::operator!=(const lldb_private::CompilerType &lhs,
                               const lldb_private::CompilerType &rhs) {
   return lhs.GetTypeSystem() != rhs.GetTypeSystem() ||
-         lhs.GetOpaqueQualType() != rhs.GetOpaqueQualType();
+         lhs.GetOpaqueQualType() != rhs.GetOpaqueQualType() ||
+         lhs.GetByteOrder() != rhs.GetByteOrder();
 }
