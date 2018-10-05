@@ -2046,6 +2046,8 @@ CompilerType ClangASTSource::GuardedCopyType(const CompilerType &src_type) {
     return CompilerType();
   }
 
+  lldb::ByteOrder byte_order = src_type.GetByteOrder();
+
   SetImportInProgress(false);
 
   if (copied_qual_type.getAsOpaquePtr() &&
@@ -2054,7 +2056,7 @@ CompilerType ClangASTSource::GuardedCopyType(const CompilerType &src_type) {
     // seems to be generating bad types on occasion.
     return CompilerType();
 
-  return CompilerType(m_ast_context, copied_qual_type);
+  return CompilerType(m_ast_context, copied_qual_type, byte_order);
 }
 
 clang::NamedDecl *NameSearchContext::AddVarDecl(const CompilerType &type) {

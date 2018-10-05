@@ -289,6 +289,7 @@ TypeSP DWARFASTParserClang::ParseTypeFromDWARF(const SymbolContext &sc,
         const size_t num_attributes = die.GetAttributes(attributes);
         uint32_t encoding = 0;
         DWARFFormValue encoding_uid;
+        ByteOrder byte_order = eByteOrderInvalid;
 
         if (num_attributes > 0) {
           uint32_t i;
@@ -329,6 +330,16 @@ TypeSP DWARFASTParserClang::ParseTypeFromDWARF(const SymbolContext &sc,
                 break;
               default:
               case DW_AT_sibling:
+                break;
+              case DW_AT_endianity:
+                switch(form_value.Unsigned()) {
+                  case DW_END_big:
+                    byte_order = eByteOrderBig;
+                    break;
+                  case DW_END_little:
+                    byte_order = eByteOrderLittle;
+                    break;
+                }
                 break;
               }
             }
@@ -394,6 +405,7 @@ TypeSP DWARFASTParserClang::ParseTypeFromDWARF(const SymbolContext &sc,
           resolve_state = Type::eResolveStateFull;
           clang_type = m_ast.GetBuiltinTypeForDWARFEncodingAndBitSize(
               type_name_cstr, encoding, byte_size * 8);
+          clang_type.SetByteOrder(byte_order);
           break;
 
         case DW_TAG_pointer_type:
@@ -3241,6 +3253,9 @@ bool DWARFASTParserClang::ParseChildMembers(
               field_decl = ClangASTContext::AddFieldToRecordType(
                   class_clang_type, name, member_clang_type, accessibility,
                   bit_size);
+
+              if (member_clang_type.GetByteOrder() != eByteOrderInvalid)
+                  class_clang_type.SetByteOrder(member_clang_type.GetByteOrder());
 
               m_ast.SetMetadataAsUserID(field_decl, die.GetID());
 
