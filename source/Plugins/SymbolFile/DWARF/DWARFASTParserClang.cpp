@@ -308,14 +308,7 @@ TypeSP DWARFASTParserClang::ParseTypeFromDWARF(const SymbolContext &sc,
                 decl.SetColumn(form_value.Unsigned());
                 break;
               case DW_AT_name:
-
                 type_name_cstr = form_value.AsCString();
-                // Work around a bug in llvm-gcc where they give a name to a
-                // reference type which doesn't include the "&"...
-                if (tag == DW_TAG_reference_type) {
-                  if (strchr(type_name_cstr, '&') == NULL)
-                    type_name_cstr = NULL;
-                }
                 if (type_name_cstr)
                   type_name_const_str.SetCString(type_name_cstr);
                 break;
@@ -570,16 +563,9 @@ TypeSP DWARFASTParserClang::ParseTypeFromDWARF(const SymbolContext &sc,
             if (attributes.ExtractFormValueAtIndex(i, form_value)) {
               switch (attr) {
               case DW_AT_decl_file:
-                if (die.GetCU()->DW_AT_decl_file_attributes_are_invalid()) {
-                  // llvm-gcc outputs invalid DW_AT_decl_file attributes that
-                  // always point to the compile unit file, so we clear this
-                  // invalid value so that we can still unique types
-                  // efficiently.
-                  decl.SetFile(FileSpec("<invalid>", false));
-                } else
-                  decl.SetFile(
-                      sc.comp_unit->GetSupportFiles().GetFileSpecAtIndex(
-                          form_value.Unsigned()));
+                decl.SetFile(
+                   sc.comp_unit->GetSupportFiles().GetFileSpecAtIndex(
+                      form_value.Unsigned()));
                 break;
 
               case DW_AT_decl_line:
@@ -2120,95 +2106,6 @@ bool DWARFASTParserClang::ParseTemplateParameterInfos(
   return template_param_infos.args.size() == template_param_infos.names.size();
 }
 
-// Checks whether m1 is an overload of m2 (as opposed to an override). This is
-// called by addOverridesForMethod to distinguish overrides (which share a
-// vtable entry) from overloads (which require distinct entries).
-static bool isOverload(clang::CXXMethodDecl *m1, clang::CXXMethodDecl *m2) {
-  // FIXME: This should detect covariant return types, but currently doesn't.
-  lldbassert(&m1->getASTContext() == &m2->getASTContext() &&
-             "Methods should have the same AST context");
-  clang::ASTContext &context = m1->getASTContext();
-
-  const auto *m1Type =
-    llvm::cast<clang::FunctionProtoType>(
-      context.getCanonicalType(m1->getType()));
-
-  const auto *m2Type =
-    llvm::cast<clang::FunctionProtoType>(
-      context.getCanonicalType(m2->getType()));
-
-  auto compareArgTypes =
-    [&context](const clang::QualType &m1p, const clang::QualType &m2p) {
-      return context.hasSameType(m1p.getUnqualifiedType(),
-                                 m2p.getUnqualifiedType());
-    };
-
-  // FIXME: In C++14 and later, we can just pass m2Type->param_type_end()
-  //        as a fourth parameter to std::equal().
-  return (m1->getNumParams() != m2->getNumParams()) ||
-         !std::equal(m1Type->param_type_begin(), m1Type->param_type_end(),
-                     m2Type->param_type_begin(), compareArgTypes);
-}
-
-// If decl is a virtual method, walk the base classes looking for methods that
-// decl overrides. This table of overridden methods is used by IRGen to
-// determine the vtable layout for decl's parent class.
-static void addOverridesForMethod(clang::CXXMethodDecl *decl) {
-  if (!decl->isVirtual())
-    return;
-
-  clang::CXXBasePaths paths;
-
-  auto find_overridden_methods =
-    [decl](const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path) {
-      if (auto *base_record =
-          llvm::dyn_cast<clang::CXXRecordDecl>(
-            specifier->getType()->getAs<clang::RecordType>()->getDecl())) {
-
-        clang::DeclarationName name = decl->getDeclName();
-
-        // If this is a destructor, check whether the base class destructor is
-        // virtual.
-        if (name.getNameKind() == clang::DeclarationName::CXXDestructorName)
-          if (auto *baseDtorDecl = base_record->getDestructor()) {
-            if (baseDtorDecl->isVirtual()) {
-              path.Decls = baseDtorDecl;
-              return true;
-            } else
-              return false;
-          }
-
-        // Otherwise, search for name in the base class.
-        for (path.Decls = base_record->lookup(name); !path.Decls.empty();
-             path.Decls = path.Decls.slice(1)) {
-          if (auto *method_decl =
-                llvm::dyn_cast<clang::CXXMethodDecl>(path.Decls.front()))
-            if (method_decl->isVirtual() && !isOverload(decl, method_decl)) {
-              path.Decls = method_decl;
-              return true;
-            }
-        }
-      }
-
-      return false;
-    };
-
-  if (decl->getParent()->lookupInBases(find_overridden_methods, paths)) {
-    for (auto *overridden_decl : paths.found_decls())
-      decl->addOverriddenMethod(
-        llvm::cast<clang::CXXMethodDecl>(overridden_decl));
-  }
-}
-
-// If clang_type is a CXXRecordDecl, builds the method override list for each
-// of its virtual methods.
-static void addMethodOverrides(ClangASTContext &ast, CompilerType &clang_type) {
-  if (auto *record =
-      ast.GetAsCXXRecordDecl(clang_type.GetOpaqueQualType()))
-    for (auto *method : record->methods())
-      addOverridesForMethod(method);
-}
-
 bool DWARFASTParserClang::CompleteTypeFromDWARF(const DWARFDIE &die,
                                                 lldb_private::Type *type,
                                                 CompilerType &clang_type) {
@@ -2417,7 +2314,7 @@ bool DWARFASTParserClang::CompleteTypeFromDWARF(const DWARFDIE &die,
       }
     }
 
-    addMethodOverrides(m_ast, clang_type);
+    m_ast.AddMethodOverridesForCXXRecordType(clang_type.GetOpaqueQualType());
     ClangASTContext::BuildIndirectFields(clang_type);
     ClangASTContext::CompleteTagDeclarationDefinition(clang_type);
 
@@ -2989,15 +2886,6 @@ bool DWARFASTParserClang::ParseChildMembers(
             class_language == eLanguageTypeObjC_plus_plus)
           accessibility = eAccessNone;
 
-        if (member_idx == 0 && !is_artificial && name &&
-            (strstr(name, "_vptr$") == name)) {
-          // Not all compilers will mark the vtable pointer member as
-          // artificial (llvm-gcc). We can't have the virtual members in our
-          // classes otherwise it throws off all child offsets since we end up
-          // having and extra pointer sized member in our class layouts.
-          is_artificial = true;
-        }
-
         // Handle static members
         if (is_external && member_byte_offset == UINT32_MAX) {
           Type *var_type = die.ResolveTypeUID(DIERef(encoding_form));
@@ -3501,51 +3389,29 @@ size_t DWARFASTParserClang::ParseChildParameters(
         }
 
         bool skip = false;
-        if (skip_artificial) {
-          if (is_artificial) {
-            // In order to determine if a C++ member function is "const" we
-            // have to look at the const-ness of "this"... Ugly, but that
-            if (arg_idx == 0) {
-              if (DeclKindIsCXXClass(containing_decl_ctx->getDeclKind())) {
-                // Often times compilers omit the "this" name for the
-                // specification DIEs, so we can't rely upon the name being in
-                // the formal parameter DIE...
-                if (name == NULL || ::strcmp(name, "this") == 0) {
-                  Type *this_type =
-                      die.ResolveTypeUID(DIERef(param_type_die_form));
-                  if (this_type) {
-                    uint32_t encoding_mask = this_type->GetEncodingMask();
-                    if (encoding_mask & Type::eEncodingIsPointerUID) {
-                      is_static = false;
+        if (skip_artificial && is_artificial) {
+          // In order to determine if a C++ member function is "const" we
+          // have to look at the const-ness of "this"...
+          if (arg_idx == 0 &&
+              DeclKindIsCXXClass(containing_decl_ctx->getDeclKind()) &&
+              // Often times compilers omit the "this" name for the
+              // specification DIEs, so we can't rely upon the name being in
+              // the formal parameter DIE...
+              (name == NULL || ::strcmp(name, "this") == 0)) {
+            Type *this_type = die.ResolveTypeUID(DIERef(param_type_die_form));
+            if (this_type) {
+              uint32_t encoding_mask = this_type->GetEncodingMask();
+              if (encoding_mask & Type::eEncodingIsPointerUID) {
+                is_static = false;
 
-                      if (encoding_mask & (1u << Type::eEncodingIsConstUID))
-                        type_quals |= clang::Qualifiers::Const;
-                      if (encoding_mask & (1u << Type::eEncodingIsVolatileUID))
-                        type_quals |= clang::Qualifiers::Volatile;
-                    }
-                  }
-                }
-              }
-            }
-            skip = true;
-          } else {
-
-            // HACK: Objective-C formal parameters "self" and "_cmd"
-            // are not marked as artificial in the DWARF...
-            CompileUnit *comp_unit = die.GetLLDBCompileUnit();
-            if (comp_unit) {
-              switch (comp_unit->GetLanguage()) {
-              case eLanguageTypeObjC:
-              case eLanguageTypeObjC_plus_plus:
-                if (name && name[0] &&
-                    (strcmp(name, "self") == 0 || strcmp(name, "_cmd") == 0))
-                  skip = true;
-                break;
-              default:
-                break;
+                if (encoding_mask & (1u << Type::eEncodingIsConstUID))
+                  type_quals |= clang::Qualifiers::Const;
+                if (encoding_mask & (1u << Type::eEncodingIsVolatileUID))
+                  type_quals |= clang::Qualifiers::Volatile;
               }
             }
           }
+          skip = true;
         }
 
         if (!skip) {

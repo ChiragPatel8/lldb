@@ -14,12 +14,12 @@
 #include "lldb/Core/Address.h"
 #include "lldb/Core/Opcode.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Symbol/UnwindPlan.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/DataExtractor.h"
+#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/Stream.h"
 #include "llvm-c/Disassembler.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -1015,7 +1015,7 @@ bool EmulateInstructionMIPS::SetInstruction(const Opcode &insn_opcode,
   m_use_alt_disaasm = false;
 
   if (EmulateInstruction::SetInstruction(insn_opcode, inst_addr, target)) {
-    if (inst_addr.GetAddressClass() == eAddressClassCodeAlternateISA) {
+    if (inst_addr.GetAddressClass() == AddressClass::eCodeAlternateISA) {
       Status error;
       lldb::addr_t load_addr = LLDB_INVALID_ADDRESS;
 
@@ -1044,7 +1044,7 @@ bool EmulateInstructionMIPS::SetInstruction(const Opcode &insn_opcode,
       return true;
     } else {
       /*
-       * If the address class is not eAddressClassCodeAlternateISA then
+       * If the address class is not AddressClass::eCodeAlternateISA then
        * the function is not microMIPS. In this case instruction size is
        * always 4 bytes.
       */

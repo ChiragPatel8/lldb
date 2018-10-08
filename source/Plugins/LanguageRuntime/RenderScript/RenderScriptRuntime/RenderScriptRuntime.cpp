@@ -20,7 +20,6 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/DumpDataExtractor.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/ValueObjectVariable.h"
 #include "lldb/DataFormatters/DumpValueObjectOptions.h"
 #include "lldb/Expression/UserExpression.h"
@@ -43,6 +42,7 @@
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/DataBufferLLVM.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/RegularExpression.h"
 #include "lldb/Utility/Status.h"
 
@@ -4171,13 +4171,13 @@ public:
   }
 };
 
-static OptionDefinition g_renderscript_reduction_bp_set_options[] = {
+static constexpr OptionDefinition g_renderscript_reduction_bp_set_options[] = {
     {LLDB_OPT_SET_1, false, "function-role", 't',
-     OptionParser::eRequiredArgument, nullptr, nullptr, 0, eArgTypeOneLiner,
+     OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeOneLiner,
      "Break on a comma separated set of reduction kernel types "
      "(accumulator,outcoverter,combiner,initializer"},
     {LLDB_OPT_SET_1, false, "coordinate", 'c', OptionParser::eRequiredArgument,
-     nullptr, nullptr, 0, eArgTypeValue,
+     nullptr, {}, 0, eArgTypeValue,
      "Set a breakpoint on a single invocation of the kernel with specified "
      "coordinate.\n"
      "Coordinate takes the form 'x[,y][,z] where x,y,z are positive "
@@ -4330,9 +4330,9 @@ private:
   CommandOptions m_options;
 };
 
-static OptionDefinition g_renderscript_kernel_bp_set_options[] = {
+static constexpr OptionDefinition g_renderscript_kernel_bp_set_options[] = {
     {LLDB_OPT_SET_1, false, "coordinate", 'c', OptionParser::eRequiredArgument,
-     nullptr, nullptr, 0, eArgTypeValue,
+     nullptr, {}, 0, eArgTypeValue,
      "Set a breakpoint on a single invocation of the kernel with specified "
      "coordinate.\n"
      "Coordinate takes the form 'x[,y][,z] where x,y,z are positive "
@@ -4602,9 +4602,9 @@ public:
   }
 };
 
-static OptionDefinition g_renderscript_runtime_alloc_dump_options[] = {
+static constexpr OptionDefinition g_renderscript_runtime_alloc_dump_options[] = {
     {LLDB_OPT_SET_1, false, "file", 'f', OptionParser::eRequiredArgument,
-     nullptr, nullptr, 0, eArgTypeFilename,
+     nullptr, {}, 0, eArgTypeFilename,
      "Print results to specified file instead of command line."}};
 
 class CommandObjectRenderScriptRuntimeContext : public CommandObjectMultiword {
@@ -4738,9 +4738,9 @@ private:
   CommandOptions m_options;
 };
 
-static OptionDefinition g_renderscript_runtime_alloc_list_options[] = {
+static constexpr OptionDefinition g_renderscript_runtime_alloc_list_options[] = {
     {LLDB_OPT_SET_1, false, "id", 'i', OptionParser::eRequiredArgument, nullptr,
-     nullptr, 0, eArgTypeIndex,
+     {}, 0, eArgTypeIndex,
      "Only show details of a single allocation with specified id."}};
 
 class CommandObjectRenderScriptRuntimeAllocationList

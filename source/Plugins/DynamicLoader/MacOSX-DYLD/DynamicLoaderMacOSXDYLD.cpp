@@ -13,7 +13,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/ObjectFile.h"
@@ -27,6 +26,7 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 #include "DynamicLoaderDarwin.h"
 #include "DynamicLoaderMacOSXDYLD.h"
@@ -898,7 +898,7 @@ uint32_t DynamicLoaderMacOSXDYLD::ParseLoadCommands(const DataExtractor &data,
         break;
 
       case llvm::MachO::LC_UUID:
-        dylib_info.uuid.SetBytes(data.GetData(&offset, 16));
+        dylib_info.uuid = UUID::fromOptionalData(data.GetData(&offset, 16), 16);
         break;
 
       default:
@@ -975,9 +975,8 @@ void DynamicLoaderMacOSXDYLD::UpdateImageInfosHeaderAndLoadCommands(
         // re-add it back to make sure it is always in the list.
         ModuleSP dyld_module_sp(GetDYLDModule());
 
-        const bool get_dependent_images = false;
         m_process->GetTarget().SetExecutableModule(exe_module_sp,
-                                                   get_dependent_images);
+                                                   eLoadDependentsNo);
 
         if (dyld_module_sp) {
           if (target.GetImages().AppendIfNeeded(dyld_module_sp)) {
@@ -1110,7 +1109,7 @@ bool DynamicLoaderMacOSXDYLD::GetSharedCacheInformation(
         uuid_t shared_cache_uuid;
         if (m_process->ReadMemory(sharedCacheUUID_address, shared_cache_uuid,
                                   sizeof(uuid_t), err) == sizeof(uuid_t)) {
-          uuid.SetBytes(shared_cache_uuid);
+          uuid = UUID::fromOptionalData(shared_cache_uuid, 16);
           if (uuid.IsValid()) {
             using_shared_cache = eLazyBoolYes;
           }

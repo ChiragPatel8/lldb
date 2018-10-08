@@ -15,7 +15,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Host/Symbols.h"
 #include "lldb/Interpreter/OptionValueProperties.h"
@@ -29,6 +28,7 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 #include "DynamicLoaderDarwinKernel.h"
 
@@ -58,7 +58,7 @@ enum KASLRScanType {
                            // range looking for a kernel
 };
 
-OptionEnumValueElement g_kaslr_kernel_scan_enum_values[] = {
+static constexpr OptionEnumValueElement g_kaslr_kernel_scan_enum_values[] = {
     {eKASLRScanNone, "none",
      "Do not read memory looking for a Darwin kernel when attaching."},
     {eKASLRScanLowgloAddresses, "basic", "Check for the Darwin kernel's load "
@@ -68,17 +68,15 @@ OptionEnumValueElement g_kaslr_kernel_scan_enum_values[] = {
                                     "the Darwin kernel's load address."},
     {eKASLRScanExhaustiveScan, "exhaustive-scan",
      "Scan through the entire potential address range of Darwin kernel (only "
-     "on 32-bit targets)."},
-    {0, NULL, NULL}};
+     "on 32-bit targets)."}};
 
-static PropertyDefinition g_properties[] = {
-    {"load-kexts", OptionValue::eTypeBoolean, true, true, NULL, NULL,
+static constexpr PropertyDefinition g_properties[] = {
+    {"load-kexts", OptionValue::eTypeBoolean, true, true, NULL, {},
      "Automatically loads kext images when attaching to a kernel."},
     {"scan-type", OptionValue::eTypeEnum, true, eKASLRScanNearPC, NULL,
-     g_kaslr_kernel_scan_enum_values, "Control how many reads lldb will make "
-                                      "while searching for a Darwin kernel on "
-                                      "attach."},
-    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, NULL, NULL}};
+     OptionEnumValues(g_kaslr_kernel_scan_enum_values),
+     "Control how many reads lldb will make while searching for a Darwin "
+     "kernel on attach."}};
 
 enum { ePropertyLoadKexts, ePropertyScanType };
 
@@ -652,11 +650,12 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::ReadMemoryModule(
 
   llvm::MachO::mach_header mh;
   size_t size_to_read = 512;
-  if (ReadMachHeader (m_load_address, process, mh)) {
-    if (mh.magic == llvm::MachO::MH_CIGAM || llvm::MachO::MH_MAGIC)
-      size_to_read = sizeof (llvm::MachO::mach_header) + mh.sizeofcmds;
-    if (mh.magic == llvm::MachO::MH_CIGAM_64 || llvm::MachO::MH_MAGIC_64)
-      size_to_read = sizeof (llvm::MachO::mach_header_64) + mh.sizeofcmds;
+  if (ReadMachHeader(m_load_address, process, mh)) {
+    if (mh.magic == llvm::MachO::MH_CIGAM || mh.magic == llvm::MachO::MH_MAGIC)
+      size_to_read = sizeof(llvm::MachO::mach_header) + mh.sizeofcmds;
+    if (mh.magic == llvm::MachO::MH_CIGAM_64 ||
+        mh.magic == llvm::MachO::MH_MAGIC_64)
+      size_to_read = sizeof(llvm::MachO::mach_header_64) + mh.sizeofcmds;
   }
 
   ModuleSP memory_module_sp =
@@ -847,7 +846,7 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
         target.GetImages().AppendIfNeeded(m_module_sp);
         if (IsKernel() &&
             target.GetExecutableModulePointer() != m_module_sp.get()) {
-          target.SetExecutableModule(m_module_sp, false);
+          target.SetExecutableModule(m_module_sp, eLoadDependentsNo);
         }
       }
     }
@@ -1368,7 +1367,7 @@ uint32_t DynamicLoaderDarwinKernel::ReadKextSummaries(
       if (name_data == NULL)
         break;
       image_infos[i].SetName((const char *)name_data);
-      UUID uuid(extractor.GetData(&offset, 16), 16);
+      UUID uuid = UUID::fromOptionalData(extractor.GetData(&offset, 16), 16);
       image_infos[i].SetUUID(uuid);
       image_infos[i].SetLoadAddress(extractor.GetU64(&offset));
       image_infos[i].SetSize(extractor.GetU64(&offset));
@@ -1403,30 +1402,12 @@ bool DynamicLoaderDarwinKernel::ReadAllKextSummaries() {
 // Dump an image info structure to the file handle provided.
 //----------------------------------------------------------------------
 void DynamicLoaderDarwinKernel::KextImageInfo::PutToLog(Log *log) const {
-  if (log == NULL)
-    return;
-  const uint8_t *u = static_cast<const uint8_t *>(m_uuid.GetBytes());
-
   if (m_load_address == LLDB_INVALID_ADDRESS) {
-    if (u) {
-      log->Printf("\tuuid=%2.2X%2.2X%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-%2.2X%2."
-                  "2X-%2.2X%2.2X%2.2X%2.2X%2.2X%2.2X name=\"%s\" (UNLOADED)",
-                  u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7], u[8], u[9],
-                  u[10], u[11], u[12], u[13], u[14], u[15], m_name.c_str());
-    } else
-      log->Printf("\tname=\"%s\" (UNLOADED)", m_name.c_str());
+    LLDB_LOG(log, "uuid={0} name=\"{1}\" (UNLOADED)", m_uuid.GetAsString(),
+             m_name);
   } else {
-    if (u) {
-      log->Printf("\taddr=0x%16.16" PRIx64 " size=0x%16.16" PRIx64
-                  " uuid=%2.2X%2.2X%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-"
-                  "%2.2X%2.2X%2.2X%2.2X%2.2X%2.2X name=\"%s\"",
-                  m_load_address, m_size, u[0], u[1], u[2], u[3], u[4], u[5],
-                  u[6], u[7], u[8], u[9], u[10], u[11], u[12], u[13], u[14],
-                  u[15], m_name.c_str());
-    } else {
-      log->Printf("\t[0x%16.16" PRIx64 " - 0x%16.16" PRIx64 ") name=\"%s\"",
-                  m_load_address, m_load_address + m_size, m_name.c_str());
-    }
+    LLDB_LOG(log, "addr={0:x+16} size={1:x+16} uuid={2} name=\"{3}\"",
+        m_load_address, m_size, m_uuid.GetAsString(), m_name);
   }
 }
 

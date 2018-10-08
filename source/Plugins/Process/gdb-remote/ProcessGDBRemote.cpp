@@ -34,7 +34,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/Value.h"
 #include "lldb/DataFormatters/FormatManager.h"
@@ -68,6 +67,7 @@
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/CleanUp.h"
 #include "lldb/Utility/FileSpec.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 
@@ -110,12 +110,11 @@ void DumpProcessGDBRemotePacketHistory(void *p, const char *path) {
 
 namespace {
 
-static PropertyDefinition g_properties[] = {
-    {"packet-timeout", OptionValue::eTypeUInt64, true, 1, NULL, NULL,
+static constexpr PropertyDefinition g_properties[] = {
+    {"packet-timeout", OptionValue::eTypeUInt64, true, 1, NULL, {},
      "Specify the default packet timeout in seconds."},
-    {"target-definition-file", OptionValue::eTypeFileSpec, true, 0, NULL, NULL,
-     "The file that provides the description for remote target registers."},
-    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, NULL, NULL}};
+    {"target-definition-file", OptionValue::eTypeFileSpec, true, 0, NULL, {},
+     "The file that provides the description for remote target registers."}};
 
 enum { ePropertyPacketTimeout, ePropertyTargetDefinitionFile };
 
@@ -1523,7 +1522,6 @@ void ProcessGDBRemote::ClearThreadIDList() {
 size_t
 ProcessGDBRemote::UpdateThreadIDsFromStopReplyThreadsValue(std::string &value) {
   m_thread_ids.clear();
-  m_thread_pcs.clear();
   size_t comma_pos;
   lldb::tid_t tid;
   while ((comma_pos = value.find(',')) != std::string::npos) {
@@ -3485,7 +3483,7 @@ Status ProcessGDBRemote::LaunchAndConnectToDebugserver(
     if (m_gdb_comm.IsConnected()) {
       // Finish the connection process by doing the handshake without
       // connecting (send NULL URL)
-      ConnectToDebugserver("");
+      error = ConnectToDebugserver("");
     } else {
       error.SetErrorString("connection failed");
     }
@@ -4803,7 +4801,7 @@ size_t ProcessGDBRemote::LoadModules(LoadedModuleInfoList &module_list) {
         return true;
 
       lldb::ModuleSP module_copy_sp = module_sp;
-      target.SetExecutableModule(module_copy_sp, false);
+      target.SetExecutableModule(module_copy_sp, eLoadDependentsNo);
       return false;
     });
 
@@ -5244,8 +5242,9 @@ public:
 
   ~CommandObjectProcessGDBRemotePacketMonitor() {}
 
-  bool DoExecute(const char *command, CommandReturnObject &result) override {
-    if (command == NULL || command[0] == '\0') {
+  bool DoExecute(llvm::StringRef command,
+                 CommandReturnObject &result) override {
+    if (command.empty()) {
       result.AppendErrorWithFormat("'%s' takes a command string argument",
                                    m_cmd_name.c_str());
       result.SetStatus(eReturnStatusFailed);
@@ -5257,7 +5256,7 @@ public:
     if (process) {
       StreamString packet;
       packet.PutCString("qRcmd,");
-      packet.PutBytesAsRawHex8(command, strlen(command));
+      packet.PutBytesAsRawHex8(command.data(), command.size());
 
       bool send_async = true;
       StringExtractorGDBRemote response;

@@ -41,7 +41,6 @@
 
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/DataFormatters/DataVisualization.h"
@@ -53,6 +52,7 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Target/TargetList.h"
 #include "lldb/Utility/Args.h"
+#include "lldb/Utility/State.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -500,11 +500,23 @@ static void AddBoolConfigEntry(StructuredData::Dictionary &dict,
   dict.AddItem(name, std::move(entry_up));
 }
 
+static void AddLLVMTargets(StructuredData::Dictionary &dict) {
+  auto array_up = llvm::make_unique<StructuredData::Array>();
+#define LLVM_TARGET(target)                                                    \
+  array_up->AddItem(llvm::make_unique<StructuredData::String>(#target));
+#include "llvm/Config/Targets.def"
+  auto entry_up = llvm::make_unique<StructuredData::Dictionary>();
+  entry_up->AddItem("value", std::move(array_up));
+  entry_up->AddStringItem("description", "A list of configured LLVM targets.");
+  dict.AddItem("targets", std::move(entry_up));
+}
+
 SBStructuredData SBDebugger::GetBuildConfiguration() {
   auto config_up = llvm::make_unique<StructuredData::Dictionary>();
   AddBoolConfigEntry(
       *config_up, "xml", XMLDocument::XMLEnabled(),
       "A boolean value that indicates if XML support is enabled in LLDB");
+  AddLLVMTargets(*config_up);
 
   SBStructuredData data;
   data.m_impl_up->SetObjectSP(std::move(config_up));
@@ -546,7 +558,8 @@ lldb::SBTarget SBDebugger::CreateTarget(const char *filename,
     platform_options.SetPlatformName(platform_name);
 
     sb_error.ref() = m_opaque_sp->GetTargetList().CreateTarget(
-        *m_opaque_sp, filename, target_triple, add_dependent_modules,
+        *m_opaque_sp, filename, target_triple,
+        add_dependent_modules ? eLoadDependentsYes : eLoadDependentsNo,
         &platform_options, target_sp);
 
     if (sb_error.Success())
@@ -575,7 +588,8 @@ SBDebugger::CreateTargetWithFileAndTargetTriple(const char *filename,
   if (m_opaque_sp) {
     const bool add_dependent_modules = true;
     Status error(m_opaque_sp->GetTargetList().CreateTarget(
-        *m_opaque_sp, filename, target_triple, add_dependent_modules, nullptr,
+        *m_opaque_sp, filename, target_triple,
+        add_dependent_modules ? eLoadDependentsYes : eLoadDependentsNo, nullptr,
         target_sp));
     sb_target.SetSP(target_sp);
   }
@@ -601,7 +615,8 @@ SBTarget SBDebugger::CreateTargetWithFileAndArch(const char *filename,
     const bool add_dependent_modules = true;
 
     error = m_opaque_sp->GetTargetList().CreateTarget(
-        *m_opaque_sp, filename, arch_cstr, add_dependent_modules, nullptr,
+        *m_opaque_sp, filename, arch_cstr,
+        add_dependent_modules ? eLoadDependentsYes : eLoadDependentsNo, nullptr,
         target_sp);
 
     if (error.Success()) {
@@ -626,7 +641,9 @@ SBTarget SBDebugger::CreateTarget(const char *filename) {
     Status error;
     const bool add_dependent_modules = true;
     error = m_opaque_sp->GetTargetList().CreateTarget(
-        *m_opaque_sp, filename, "", add_dependent_modules, nullptr, target_sp);
+        *m_opaque_sp, filename, "",
+        add_dependent_modules ? eLoadDependentsYes : eLoadDependentsNo, nullptr,
+        target_sp);
 
     if (error.Success()) {
       m_opaque_sp->GetTargetList().SetSelectedTarget(target_sp.get());

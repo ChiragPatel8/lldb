@@ -245,17 +245,24 @@ struct ArchDefinition {
   const char *name;
 };
 
-size_t ArchSpec::AutoComplete(llvm::StringRef name, StringList &matches) {
-  if (!name.empty()) {
+void ArchSpec::ListSupportedArchNames(StringList &list) {
+  for (uint32_t i = 0; i < llvm::array_lengthof(g_core_definitions); ++i)
+    list.AppendString(g_core_definitions[i].name);
+}
+
+size_t ArchSpec::AutoComplete(CompletionRequest &request) {
+  if (!request.GetCursorArgumentPrefix().empty()) {
     for (uint32_t i = 0; i < llvm::array_lengthof(g_core_definitions); ++i) {
-      if (NameMatches(g_core_definitions[i].name, NameMatch::StartsWith, name))
-        matches.AppendString(g_core_definitions[i].name);
+      if (NameMatches(g_core_definitions[i].name, NameMatch::StartsWith,
+                      request.GetCursorArgumentPrefix()))
+        request.AddCompletion(g_core_definitions[i].name);
     }
   } else {
-    for (uint32_t i = 0; i < llvm::array_lengthof(g_core_definitions); ++i)
-      matches.AppendString(g_core_definitions[i].name);
+    StringList matches;
+    ListSupportedArchNames(matches);
+    request.AddCompletions(matches);
   }
-  return matches.GetSize();
+  return request.GetNumberOfMatches();
 }
 
 #define CPU_ANY (UINT32_MAX)
@@ -808,6 +815,7 @@ bool ArchSpec::CharIsSignedByDefault() const {
   case llvm::Triple::ppc64le:
   case llvm::Triple::systemz:
   case llvm::Triple::xcore:
+  case llvm::Triple::arc:
     return false;
   }
 }
@@ -1470,7 +1478,10 @@ bool ArchSpec::IsAlwaysThumbInstructions() const {
 
     if (GetCore() == ArchSpec::Core::eCore_arm_armv7m ||
         GetCore() == ArchSpec::Core::eCore_arm_armv7em ||
-        GetCore() == ArchSpec::Core::eCore_arm_armv6m) {
+        GetCore() == ArchSpec::Core::eCore_arm_armv6m ||
+        GetCore() == ArchSpec::Core::eCore_thumbv7m ||
+        GetCore() == ArchSpec::Core::eCore_thumbv7em ||
+        GetCore() == ArchSpec::Core::eCore_thumbv6m) {
       return true;
     }
   }

@@ -23,12 +23,12 @@
 #include "lldb/Breakpoint/BreakpointSite.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -225,16 +225,16 @@ PlatformFreeBSD::GetSoftwareBreakpointTrapOpcode(Target &target,
   switch (target.GetArchitecture().GetMachine()) {
   case llvm::Triple::arm: {
     lldb::BreakpointLocationSP bp_loc_sp(bp_site->GetOwnerAtIndex(0));
-    AddressClass addr_class = eAddressClassUnknown;
+    AddressClass addr_class = AddressClass::eUnknown;
 
     if (bp_loc_sp) {
       addr_class = bp_loc_sp->GetAddress().GetAddressClass();
-      if (addr_class == eAddressClassUnknown &&
+      if (addr_class == AddressClass::eUnknown &&
           (bp_loc_sp->GetAddress().GetFileAddress() & 1))
-        addr_class = eAddressClassCodeAlternateISA;
+        addr_class = AddressClass::eCodeAlternateISA;
     }
 
-    if (addr_class == eAddressClassCodeAlternateISA) {
+    if (addr_class == AddressClass::eCodeAlternateISA) {
       // TODO: Enable when FreeBSD supports thumb breakpoints.
       // FreeBSD kernel as of 10.x, does not support thumb breakpoints
       return 0;
@@ -274,9 +274,9 @@ lldb::ProcessSP PlatformFreeBSD::Attach(ProcessAttachInfo &attach_info,
       TargetSP new_target_sp;
       ArchSpec emptyArchSpec;
 
-      error = debugger.GetTargetList().CreateTarget(debugger, "", emptyArchSpec,
-                                                    false, m_remote_platform_sp,
-                                                    new_target_sp);
+      error = debugger.GetTargetList().CreateTarget(
+          debugger, "", emptyArchSpec, eLoadDependentsNo, m_remote_platform_sp,
+          new_target_sp);
       target = new_target_sp.get();
     } else
       error.Clear();

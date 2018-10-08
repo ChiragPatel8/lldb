@@ -18,13 +18,13 @@
 
 // Other libraries and framework includes
 #include "lldb/Core/DumpDataExtractor.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/UUID.h"
 
 // Project includes
@@ -456,7 +456,7 @@ lldb_private::UUID CommunicationKDP::GetUUID() {
   if (uuid_str.size() < 32)
     return uuid;
 
-  if (uuid.SetFromCString(uuid_str.c_str()) == 0) {
+  if (uuid.SetFromStringRef(uuid_str) == 0) {
     UUID invalid_uuid;
     return invalid_uuid;
   }

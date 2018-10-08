@@ -402,7 +402,8 @@ class ProcessModID {
 public:
   ProcessModID()
       : m_stop_id(0), m_last_natural_stop_id(0), m_resume_id(0), m_memory_id(0),
-        m_last_user_expression_resume(0), m_running_user_expression(false) {}
+        m_last_user_expression_resume(0), m_running_user_expression(false),
+        m_running_utility_function(0) {}
 
   ProcessModID(const ProcessModID &rhs)
       : m_stop_id(rhs.m_stop_id), m_memory_id(rhs.m_memory_id) {}
@@ -429,6 +430,10 @@ public:
     m_resume_id++;
     if (m_running_user_expression > 0)
       m_last_user_expression_resume = m_resume_id;
+  }
+
+  bool IsRunningUtilityFunction() const {
+    return m_running_utility_function > 0;
   }
 
   uint32_t GetStopID() const { return m_stop_id; }
@@ -467,6 +472,17 @@ public:
       m_running_user_expression--;
   }
 
+  void SetRunningUtilityFunction(bool on) {
+    if (on)
+      m_running_utility_function++;
+    else {
+      assert(m_running_utility_function > 0 &&
+             "Called SetRunningUtilityFunction(false) without calling "
+             "SetRunningUtilityFunction(true) before?");
+      m_running_utility_function--;
+    }
+  }
+
   void SetStopEventForLastNaturalStopID(lldb::EventSP event_sp) {
     m_last_natural_stop_event = event_sp;
   }
@@ -484,6 +500,7 @@ private:
   uint32_t m_memory_id;
   uint32_t m_last_user_expression_resume;
   uint32_t m_running_user_expression;
+  uint32_t m_running_utility_function;
   lldb::EventSP m_last_natural_stop_event;
 };
 
@@ -1461,7 +1478,7 @@ public:
   ///     A Target object pointer to the target that owns this
   ///     module.
   //------------------------------------------------------------------
-  Target &GetTarget() { return *m_target_sp.lock(); }
+  Target &GetTarget() { return *m_target_wp.lock(); }
 
   //------------------------------------------------------------------
   /// Get the const target object pointer for this module.
@@ -1470,7 +1487,7 @@ public:
   ///     A const Target object pointer to the target that owns this
   ///     module.
   //------------------------------------------------------------------
-  const Target &GetTarget() const { return *m_target_sp.lock(); }
+  const Target &GetTarget() const { return *m_target_wp.lock(); }
 
   //------------------------------------------------------------------
   /// Flush all data in the process.
@@ -1696,8 +1713,15 @@ public:
   ///     A byte buffer that is at least \a size bytes long that
   ///     will receive the memory bytes.
   ///
+  /// @param[out] error
+  ///     An error that indicates the success or failure of this
+  ///     operation. If error indicates success (error.Success()),
+  ///     then the value returned can be trusted, otherwise zero
+  ///     will be returned.
+  ///
   /// @return
   ///     The number of bytes that were actually read into \a buf.
+  ///     Zero is returned in the case of an error.
   //------------------------------------------------------------------
   virtual size_t DoReadMemory(lldb::addr_t vm_addr, void *buf, size_t size,
                               Status &error) = 0;
@@ -1723,12 +1747,18 @@ public:
   /// @param[in] size
   ///     The number of bytes to read.
   ///
+  /// @param[out] error
+  ///     An error that indicates the success or failure of this
+  ///     operation. If error indicates success (error.Success()),
+  ///     then the value returned can be trusted, otherwise zero
+  ///     will be returned.
+  ///
   /// @return
   ///     The number of bytes that were actually read into \a buf. If
   ///     the returned number is greater than zero, yet less than \a
   ///     size, then this function will get called again with \a
   ///     vm_addr, \a buf, and \a size updated appropriately. Zero is
-  ///     returned to indicate an error.
+  ///     returned in the case of an error.
   //------------------------------------------------------------------
   virtual size_t ReadMemory(lldb::addr_t vm_addr, void *buf, size_t size,
                             Status &error);
@@ -2541,6 +2571,7 @@ public:
   virtual bool StopNoticingNewThreads() { return true; }
 
   void SetRunningUserExpression(bool on);
+  void SetRunningUtilityFunction(bool on);
 
   //------------------------------------------------------------------
   // lldb::ExecutionContextScope pure virtual functions
@@ -2994,7 +3025,7 @@ protected:
   //------------------------------------------------------------------
   // Member variables
   //------------------------------------------------------------------
-  std::weak_ptr<Target> m_target_sp; ///< The target that owns this process.
+  std::weak_ptr<Target> m_target_wp; ///< The target that owns this process.
   ThreadSafeValue<lldb::StateType> m_public_state;
   ThreadSafeValue<lldb::StateType>
       m_private_state;                     // The actual state of our process
@@ -3210,6 +3241,24 @@ private:
   void ControlPrivateStateThread(uint32_t signal);
 
   DISALLOW_COPY_AND_ASSIGN(Process);
+};
+
+//------------------------------------------------------------------
+/// RAII guard that should be aquired when an utility function is called within
+/// a given process.
+//------------------------------------------------------------------
+class UtilityFunctionScope {
+  Process *m_process;
+
+public:
+  UtilityFunctionScope(Process *p) : m_process(p) {
+    if (m_process)
+      m_process->SetRunningUtilityFunction(true);
+  }
+  ~UtilityFunctionScope() {
+    if (m_process)
+      m_process->SetRunningUtilityFunction(false);
+  }
 };
 
 } // namespace lldb_private

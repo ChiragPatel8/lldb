@@ -98,21 +98,14 @@ FileSpec HostInfoWindows::GetProgramFileSpec() {
 }
 
 FileSpec HostInfoWindows::GetDefaultShell() {
-  std::string shell;
-  GetEnvironmentVar("ComSpec", shell);
-  return FileSpec(shell, false);
-}
+  // Try to retrieve ComSpec from the environment. On the rare occasion
+  // that it fails, try a well-known path for ComSpec instead.
 
-bool HostInfoWindows::ComputePythonDirectory(FileSpec &file_spec) {
-  FileSpec lldb_file_spec = GetShlibDir();
-  if (!lldb_file_spec)
-    return false;
-  llvm::SmallString<64> path(lldb_file_spec.GetDirectory().AsCString());
-  llvm::sys::path::remove_filename(path);
-  llvm::sys::path::append(path, "lib", "site-packages");
-  std::replace(path.begin(), path.end(), '\\', '/');
-  file_spec.GetDirectory().SetString(path.c_str());
-  return true;
+  std::string shell;
+  if (GetEnvironmentVar("ComSpec", shell))
+    return FileSpec(shell, false);
+
+  return FileSpec("C:\\Windows\\system32\\cmd.exe", false);
 }
 
 bool HostInfoWindows::GetEnvironmentVar(const std::string &var_name,

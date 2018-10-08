@@ -12,7 +12,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolVendor.h"
@@ -21,6 +20,7 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 #include "DynamicLoaderDarwin.h"
 #include "DynamicLoaderMacOS.h"
@@ -484,7 +484,7 @@ bool DynamicLoaderMacOS::GetSharedCacheInformation(
       std::string uuid_str =
           info_dict->GetValueForKey("shared_cache_uuid")->GetStringValue();
       if (!uuid_str.empty())
-        uuid.SetFromCString(uuid_str.c_str());
+        uuid.SetFromStringRef(uuid_str);
       if (info_dict->GetValueForKey("no_shared_cache")->GetBooleanValue() ==
           false)
         using_shared_cache = eLazyBoolYes;

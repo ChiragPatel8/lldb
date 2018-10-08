@@ -21,7 +21,6 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/ValueObjectVariable.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
@@ -39,6 +38,7 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadList.h"
 #include "lldb/Utility/DataBufferHeap.h"
+#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
@@ -46,10 +46,9 @@ using namespace lldb_private;
 
 namespace {
 
-static PropertyDefinition g_properties[] = {
-    {"enable", OptionValue::eTypeBoolean, true, true, nullptr, nullptr,
-     "Specify whether goroutines should be treated as threads."},
-    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, NULL, NULL}};
+static constexpr PropertyDefinition g_properties[] = {
+    {"enable", OptionValue::eTypeBoolean, true, true, nullptr, {},
+     "Specify whether goroutines should be treated as threads."}};
 
 enum {
   ePropertyEnableGoroutines,

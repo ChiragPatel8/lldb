@@ -24,12 +24,12 @@
 
 // Other libraries and framework includes
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/RegisterValue.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/DynamicLoader.h"
 #include "lldb/Target/Target.h"
+#include "lldb/Utility/RegisterValue.h"
+#include "lldb/Utility/State.h"
 
 #include "FreeBSDThread.h"
 #include "Plugins/Process/POSIX/ProcessPOSIXLog.h"
@@ -44,7 +44,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/DynamicLoader.h"
@@ -52,6 +51,7 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/FileSpec.h"
+#include "lldb/Utility/State.h"
 
 #include "lldb/Host/posix/Fcntl.h"
 
@@ -335,7 +335,7 @@ ProcessFreeBSD::DoAttachToProcessWithID(lldb::pid_t pid,
     GetTarget().SetArchitecture(module_arch);
 
   // Initialize the target module list
-  GetTarget().SetExecutableModule(exe_module_sp, true);
+  GetTarget().SetExecutableModule(exe_module_sp, eLoadDependentsYes);
 
   SetSTDIOFileDescriptor(m_monitor->GetTerminalFD());
 
@@ -519,7 +519,7 @@ void ProcessFreeBSD::DoDidExec() {
           executable_search_paths.GetSize() ? &executable_search_paths : NULL);
       if (!error.Success())
         return;
-      target->SetExecutableModule(exe_module_sp, true);
+      target->SetExecutableModule(exe_module_sp, eLoadDependentsYes);
     }
   }
 }
@@ -661,13 +661,13 @@ ProcessFreeBSD::GetSoftwareBreakpointTrapOpcode(BreakpointSite *bp_site) {
     static const uint8_t g_thumb_breakpoint_opcode[] = {0x01, 0xde};
 
     lldb::BreakpointLocationSP bp_loc_sp(bp_site->GetOwnerAtIndex(0));
-    AddressClass addr_class = eAddressClassUnknown;
+    AddressClass addr_class = AddressClass::eUnknown;
 
     if (bp_loc_sp)
       addr_class = bp_loc_sp->GetAddress().GetAddressClass();
 
-    if (addr_class == eAddressClassCodeAlternateISA ||
-        (addr_class == eAddressClassUnknown &&
+    if (addr_class == AddressClass::eCodeAlternateISA ||
+        (addr_class == AddressClass::eUnknown &&
          bp_loc_sp->GetAddress().GetOffset() & 1)) {
       opcode = g_thumb_breakpoint_opcode;
       opcode_size = sizeof(g_thumb_breakpoint_opcode);

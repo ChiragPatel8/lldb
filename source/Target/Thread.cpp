@@ -18,7 +18,6 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/FormatEntity.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Core/State.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Interpreter/OptionValueFileSpecList.h"
@@ -49,6 +48,7 @@
 #include "lldb/Target/Unwind.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/RegularExpression.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/lldb-enumerations.h"
@@ -64,30 +64,31 @@ const ThreadPropertiesSP &Thread::GetGlobalProperties() {
   return *g_settings_sp_ptr;
 }
 
-static PropertyDefinition g_properties[] = {
+static constexpr PropertyDefinition g_properties[] = {
     {"step-in-avoid-nodebug", OptionValue::eTypeBoolean, true, true, nullptr,
-     nullptr,
+     {},
      "If true, step-in will not stop in functions with no debug information."},
     {"step-out-avoid-nodebug", OptionValue::eTypeBoolean, true, false, nullptr,
-     nullptr, "If true, when step-in/step-out/step-over leave the current "
-              "frame, they will continue to step out till they come to a "
-              "function with "
-              "debug information.  Passing a frame argument to step-out will "
-              "override this option."},
-    {"step-avoid-regexp", OptionValue::eTypeRegex, true, 0, "^std::", nullptr,
+     {}, "If true, when step-in/step-out/step-over leave the current frame, "
+         "they will continue to step out till they come to a function with "
+         "debug information. Passing a frame argument to step-out will "
+         "override this option."},
+    {"step-avoid-regexp", OptionValue::eTypeRegex, true, 0, "^std::", {},
      "A regular expression defining functions step-in won't stop in."},
     {"step-avoid-libraries", OptionValue::eTypeFileSpecList, true, 0, nullptr,
-     nullptr, "A list of libraries that source stepping won't stop in."},
-    {"trace-thread", OptionValue::eTypeBoolean, false, false, nullptr, nullptr,
+     {}, "A list of libraries that source stepping won't stop in."},
+    {"trace-thread", OptionValue::eTypeBoolean, false, false, nullptr, {},
      "If true, this thread will single-step and log execution."},
-    {nullptr, OptionValue::eTypeInvalid, false, 0, nullptr, nullptr, nullptr}};
+    {"max-backtrace-depth", OptionValue::eTypeUInt64, false, 300000, nullptr,
+     {}, "Maximum number of frames to backtrace."}};
 
 enum {
   ePropertyStepInAvoidsNoDebug,
   ePropertyStepOutAvoidsNoDebug,
   ePropertyStepAvoidRegex,
   ePropertyStepAvoidLibraries,
-  ePropertyEnableThreadTrace
+  ePropertyEnableThreadTrace,
+  ePropertyMaxBacktraceDepth
 };
 
 class ThreadOptionValueProperties : public OptionValueProperties {
@@ -162,6 +163,12 @@ bool ThreadProperties::GetStepInAvoidsNoDebug() const {
 bool ThreadProperties::GetStepOutAvoidsNoDebug() const {
   const uint32_t idx = ePropertyStepOutAvoidsNoDebug;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
+}
+
+uint64_t ThreadProperties::GetMaxBacktraceDepth() const {
+  const uint32_t idx = ePropertyMaxBacktraceDepth;
+  return m_collection_sp->GetPropertyAtIndexAsUInt64(
       nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
@@ -439,7 +446,7 @@ lldb::StopInfoSP Thread::GetPrivateStopInfo() {
     if (m_stop_info_override_stop_id != process_stop_id) {
       m_stop_info_override_stop_id = process_stop_id;
       if (m_stop_info_sp) {
-        if (Architecture *arch =
+        if (const Architecture *arch =
                 process_sp->GetTarget().GetArchitecturePlugin())
           arch->OverrideStopInfo(*this);
       }

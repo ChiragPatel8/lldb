@@ -15,7 +15,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Core/State.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Symbol/ClangASTContext.h"
@@ -32,6 +31,7 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/State.h"
 
 //#define ENABLE_DEBUG_PRINTF // COMMENT THIS LINE OUT PRIOR TO CHECKIN
 #ifdef ENABLE_DEBUG_PRINTF
@@ -555,8 +555,7 @@ void DynamicLoaderDarwin::UpdateSpecialBinariesFromNewImageInfos(
       target.GetImages().AppendIfNeeded(exe_module_sp);
       UpdateImageLoadAddress(exe_module_sp.get(), image_infos[exe_idx]);
       if (exe_module_sp.get() != target.GetExecutableModulePointer()) {
-        const bool get_dependent_images = false;
-        target.SetExecutableModule(exe_module_sp, get_dependent_images);
+        target.SetExecutableModule(exe_module_sp, eLoadDependentsNo);
       }
     }
   }
@@ -747,35 +746,14 @@ DynamicLoaderDarwin::ImageInfo::FindSegment(const ConstString &name) const {
 // Dump an image info structure to the file handle provided.
 //----------------------------------------------------------------------
 void DynamicLoaderDarwin::ImageInfo::PutToLog(Log *log) const {
-  if (log == NULL)
+  if (!log)
     return;
-  const uint8_t *u = (const uint8_t *)uuid.GetBytes();
-
   if (address == LLDB_INVALID_ADDRESS) {
-    if (u) {
-      log->Printf("\t                           modtime=0x%8.8" PRIx64
-                  " uuid=%2.2X%2.2X%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-"
-                  "%2.2X%2.2X%2.2X%2.2X%2.2X%2.2X path='%s' (UNLOADED)",
-                  mod_date, u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7],
-                  u[8], u[9], u[10], u[11], u[12], u[13], u[14], u[15],
-                  file_spec.GetPath().c_str());
-    } else
-      log->Printf("\t                           modtime=0x%8.8" PRIx64
-                  " path='%s' (UNLOADED)",
-                  mod_date, file_spec.GetPath().c_str());
+    LLDB_LOG(log, "modtime={0:x+8} uuid={1} path='{2}' (UNLOADED)", mod_date,
+             uuid.GetAsString(), file_spec.GetPath());
   } else {
-    if (u) {
-      log->Printf("\taddress=0x%16.16" PRIx64 " modtime=0x%8.8" PRIx64
-                  " uuid=%2.2X%2.2X%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-%2.2X%2.2X-"
-                  "%2.2X%2.2X%2.2X%2.2X%2.2X%2.2X path='%s'",
-                  address, mod_date, u[0], u[1], u[2], u[3], u[4], u[5], u[6],
-                  u[7], u[8], u[9], u[10], u[11], u[12], u[13], u[14], u[15],
-                  file_spec.GetPath().c_str());
-    } else {
-      log->Printf("\taddress=0x%16.16" PRIx64 " modtime=0x%8.8" PRIx64
-                  " path='%s'",
-                  address, mod_date, file_spec.GetPath().c_str());
-    }
+    LLDB_LOG(log, "address={0:x+16} modtime={1:x+8} uuid={2} path='{3}'",
+             address, mod_date, uuid.GetAsString(), file_spec.GetPath());
     for (uint32_t i = 0; i < segments.size(); ++i)
       segments[i].PutToLog(log, slide);
   }

@@ -19,8 +19,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/State.h"
-#include "lldb/Utility/UUID.h"
 #include "lldb/Host/ConnectionFileDescriptor.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/Symbols.h"
@@ -37,7 +35,9 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
+#include "lldb/Utility/State.h"
 #include "lldb/Utility/StringExtractor.h"
+#include "lldb/Utility/UUID.h"
 
 #include "llvm/Support/Threading.h"
 
@@ -55,10 +55,9 @@ using namespace lldb_private;
 
 namespace {
 
-static PropertyDefinition g_properties[] = {
-    {"packet-timeout", OptionValue::eTypeUInt64, true, 5, NULL, NULL,
-     "Specify the default packet timeout in seconds."},
-    {NULL, OptionValue::eTypeInvalid, false, 0, NULL, NULL, NULL}};
+static constexpr PropertyDefinition g_properties[] = {
+    {"packet-timeout", OptionValue::eTypeUInt64, true, 5, NULL, {},
+     "Specify the default packet timeout in seconds."}};
 
 enum { ePropertyPacketTimeout };
 
@@ -319,7 +318,7 @@ Status ProcessKDP::DoConnectRemote(Stream *strm, llvm::StringRef remote_url) {
                   // Make sure you don't already have the right module loaded
                   // and they will be uniqued
                   if (exe_module_sp.get() != module_sp.get())
-                    target.SetExecutableModule(module_sp, false);
+                    target.SetExecutableModule(module_sp, eLoadDependentsNo);
                 }
               }
             }

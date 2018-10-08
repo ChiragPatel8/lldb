@@ -24,6 +24,7 @@ string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} LLDB_DOTEST_ARGS "${LLDB_D
 list(APPEND LLDB_TEST_DEPS
   LLDBUnitTests
   dsymutil
+  llc
   lldb
   lldb-test
   llvm-config
@@ -73,7 +74,7 @@ set(LLDB_TEST_PARAMS
 add_lit_testsuite(check-lldb-lit "Running lldb lit test suite"
   ${CMAKE_CURRENT_BINARY_DIR}
   PARAMS lldb_site_config=${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg
-       lldb_unit_site_config=${CMAKE_CURRENT_BINARY_DIR}/Unit/lit.site.cfg
+         lldb_unit_site_config=${CMAKE_CURRENT_BINARY_DIR}/Unit/lit.site.cfg
   DEPENDS ${LLDB_TEST_DEPS}
   )
 
@@ -85,7 +86,8 @@ if (TARGET clang)
   add_dependencies(check-lldb-lit clang)
 endif()
 
-add_lit_testsuites(LLDB ${CMAKE_CURRENT_SOURCE_DIR}
+add_lit_testsuites(LLDB
+  ${CMAKE_CURRENT_BINARY_DIR}
   PARAMS lldb_site_config=${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg
          lldb_unit_site_config=${CMAKE_CURRENT_BINARY_DIR}/Unit/lit.site.cfg
   DEPENDS ${LLDB_TEST_DEPS}

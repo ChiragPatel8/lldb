@@ -23,7 +23,6 @@
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/RangeMap.h"
-#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Host/Host.h"
@@ -41,12 +40,13 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
 #include "lldb/Utility/UUID.h"
 
-#include "lldb/Utility/SafeMachO.h"
+#include "lldb/Host/SafeMachO.h"
 
 #include "llvm/Support/MemoryBuffer.h"
 
@@ -1161,19 +1161,19 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           const lldb::SectionType section_type = section_sp->GetType();
           switch (section_type) {
           case eSectionTypeInvalid:
-            return eAddressClassUnknown;
+            return AddressClass::eUnknown;
 
           case eSectionTypeCode:
             if (m_header.cputype == llvm::MachO::CPU_TYPE_ARM) {
               // For ARM we have a bit in the n_desc field of the symbol that
               // tells us ARM/Thumb which is bit 0x0008.
               if (symbol->GetFlags() & MACHO_NLIST_ARM_SYMBOL_IS_THUMB)
-                return eAddressClassCodeAlternateISA;
+                return AddressClass::eCodeAlternateISA;
             }
-            return eAddressClassCode;
+            return AddressClass::eCode;
 
           case eSectionTypeContainer:
-            return eAddressClassUnknown;
+            return AddressClass::eUnknown;
 
           case eSectionTypeData:
           case eSectionTypeDataCString:
@@ -1187,7 +1187,7 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           case eSectionTypeDataObjCMessageRefs:
           case eSectionTypeDataObjCCFStrings:
           case eSectionTypeGoSymtab:
-            return eAddressClassData;
+            return AddressClass::eData;
 
           case eSectionTypeDebug:
           case eSectionTypeDWARFDebugAbbrev:
@@ -1197,6 +1197,7 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           case eSectionTypeDWARFDebugFrame:
           case eSectionTypeDWARFDebugInfo:
           case eSectionTypeDWARFDebugLine:
+          case eSectionTypeDWARFDebugLineStr:
           case eSectionTypeDWARFDebugLoc:
           case eSectionTypeDWARFDebugMacInfo:
           case eSectionTypeDWARFDebugMacro:
@@ -1212,13 +1213,13 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           case eSectionTypeDWARFAppleNamespaces:
           case eSectionTypeDWARFAppleObjC:
           case eSectionTypeDWARFGNUDebugAltLink:
-            return eAddressClassDebug;
+            return AddressClass::eDebug;
 
           case eSectionTypeEHFrame:
           case eSectionTypeARMexidx:
           case eSectionTypeARMextab:
           case eSectionTypeCompactUnwind:
-            return eAddressClassRuntime;
+            return AddressClass::eRuntime;
 
           case eSectionTypeAbsoluteAddress:
           case eSectionTypeELFSymbolTable:
@@ -1226,7 +1227,7 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           case eSectionTypeELFRelocationEntries:
           case eSectionTypeELFDynamicLinkInfo:
           case eSectionTypeOther:
-            return eAddressClassUnknown;
+            return AddressClass::eUnknown;
           }
         }
       }
@@ -1234,9 +1235,9 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
       const SymbolType symbol_type = symbol->GetType();
       switch (symbol_type) {
       case eSymbolTypeAny:
-        return eAddressClassUnknown;
+        return AddressClass::eUnknown;
       case eSymbolTypeAbsolute:
-        return eAddressClassUnknown;
+        return AddressClass::eUnknown;
 
       case eSymbolTypeCode:
       case eSymbolTypeTrampoline:
@@ -1245,62 +1246,62 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
           // For ARM we have a bit in the n_desc field of the symbol that tells
           // us ARM/Thumb which is bit 0x0008.
           if (symbol->GetFlags() & MACHO_NLIST_ARM_SYMBOL_IS_THUMB)
-            return eAddressClassCodeAlternateISA;
+            return AddressClass::eCodeAlternateISA;
         }
-        return eAddressClassCode;
+        return AddressClass::eCode;
 
       case eSymbolTypeData:
-        return eAddressClassData;
+        return AddressClass::eData;
       case eSymbolTypeRuntime:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       case eSymbolTypeException:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       case eSymbolTypeSourceFile:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeHeaderFile:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeObjectFile:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeCommonBlock:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeBlock:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeLocal:
-        return eAddressClassData;
+        return AddressClass::eData;
       case eSymbolTypeParam:
-        return eAddressClassData;
+        return AddressClass::eData;
       case eSymbolTypeVariable:
-        return eAddressClassData;
+        return AddressClass::eData;
       case eSymbolTypeVariableType:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeLineEntry:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeLineHeader:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeScopeBegin:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeScopeEnd:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeAdditional:
-        return eAddressClassUnknown;
+        return AddressClass::eUnknown;
       case eSymbolTypeCompiler:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeInstrumentation:
-        return eAddressClassDebug;
+        return AddressClass::eDebug;
       case eSymbolTypeUndefined:
-        return eAddressClassUnknown;
+        return AddressClass::eUnknown;
       case eSymbolTypeObjCClass:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       case eSymbolTypeObjCMetaClass:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       case eSymbolTypeObjCIVar:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       case eSymbolTypeReExported:
-        return eAddressClassRuntime;
+        return AddressClass::eRuntime;
       }
     }
   }
-  return eAddressClassUnknown;
+  return AddressClass::eUnknown;
 }
 
 Symtab *ObjectFileMachO::GetSymtab() {
@@ -2087,10 +2088,8 @@ UUID ObjectFileMachO::GetSharedCacheUUID(FileSpec dyld_shared_cache,
   version_str[6] = '\0';
   if (strcmp(version_str, "dyld_v") == 0) {
     offset = offsetof(struct lldb_copy_dyld_cache_header_v1, uuid);
-    uint8_t uuid_bytes[sizeof(uuid_t)];
-    memcpy(uuid_bytes, dsc_header_data.GetData(&offset, sizeof(uuid_t)),
-           sizeof(uuid_t));
-    dsc_uuid.SetBytes(uuid_bytes);
+    dsc_uuid = UUID::fromOptionalData(
+        dsc_header_data.GetData(&offset, sizeof(uuid_t)), sizeof(uuid_t));
   }
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYMBOLS));
   if (log && dsc_uuid.IsValid()) {
@@ -2333,14 +2332,6 @@ size_t ObjectFileMachO::ParseSymtab() {
             if (nlist_data_sp)
               nlist_data.SetData(nlist_data_sp, 0,
                                  nlist_data_sp->GetByteSize());
-            // Load strings individually from memory when loading from memory
-            // since shared cache string tables contain strings for all symbols
-            // from all shared cached libraries DataBufferSP strtab_data_sp
-            // (ReadMemory (process_sp, strtab_addr,
-            // strtab_data_byte_size));
-            // if (strtab_data_sp)
-            //    strtab_data.SetData (strtab_data_sp, 0,
-            //    strtab_data_sp->GetByteSize());
             if (m_dysymtab.nindirectsyms != 0) {
               const addr_t indirect_syms_addr = linkedit_load_addr +
                                                 m_dysymtab.indirectsymoff -
@@ -2352,8 +2343,25 @@ size_t ObjectFileMachO::ParseSymtab() {
                 indirect_symbol_index_data.SetData(
                     indirect_syms_data_sp, 0,
                     indirect_syms_data_sp->GetByteSize());
+              // If this binary is outside the shared cache, 
+              // cache the string table.
+              // Binaries in the shared cache all share a giant string table, and
+              // we can't share the string tables across multiple ObjectFileMachO's,
+              // so we'd end up re-reading this mega-strtab for every binary
+              // in the shared cache - it would be a big perf problem.
+              // For binaries outside the shared cache, it's faster to read the
+              // entire strtab at once instead of piece-by-piece as we process
+              // the nlist records.
+              if ((m_header.flags & 0x80000000u) == 0) {
+                DataBufferSP strtab_data_sp (ReadMemory (process_sp, strtab_addr, 
+                      strtab_data_byte_size));
+                if (strtab_data_sp) {
+                  strtab_data.SetData (strtab_data_sp, 0, strtab_data_sp->GetByteSize());
+                }
+              }
             }
-          } else if (memory_module_load_level >=
+          }
+          if (memory_module_load_level >=
                      eMemoryModuleLoadLevelPartial) {
             if (function_starts_load_command.cmd) {
               const addr_t func_start_addr =
@@ -4861,7 +4869,7 @@ bool ObjectFileMachO::GetUUID(const llvm::MachO::mach_header &header,
         if (!memcmp(uuid_bytes, opencl_uuid, 16))
           return false;
 
-        uuid.SetBytes(uuid_bytes);
+        uuid = UUID::fromOptionalData(uuid_bytes, 16);
         return true;
       }
       return false;
@@ -5392,12 +5400,11 @@ bool ObjectFileMachO::GetCorefileMainBinaryInfo (addr_t &address, UUID &uuid) {
                   uuid_t raw_uuid;
                   memset (raw_uuid, 0, sizeof (uuid_t));
 
-                  if (m_data.GetU32 (&offset, &type, 1)
-                      && m_data.GetU64 (&offset, &address, 1)
-                      && m_data.CopyData (offset, sizeof (uuid_t), raw_uuid) != 0
-                      && uuid.SetBytes (raw_uuid, sizeof (uuid_t)))
-                  {
-                      return true;
+                  if (m_data.GetU32(&offset, &type, 1) &&
+                      m_data.GetU64(&offset, &address, 1) &&
+                      m_data.CopyData(offset, sizeof(uuid_t), raw_uuid) != 0) {
+                    uuid = UUID::fromOptionalData(raw_uuid, sizeof(uuid_t));
+                    return true;
                   }
               }
           }
@@ -5660,7 +5667,7 @@ void ObjectFileMachO::GetLLDBSharedCacheUUID(addr_t &base_addr, UUID &uuid) {
                           + 100); // sharedCacheBaseAddress <mach-o/dyld_images.h>
           }
         }
-        uuid.SetBytes(sharedCacheUUID_address);
+        uuid = UUID::fromOptionalData(sharedCacheUUID_address, sizeof(uuid_t));
       }
     }
   } else {
@@ -5685,7 +5692,7 @@ void ObjectFileMachO::GetLLDBSharedCacheUUID(addr_t &base_addr, UUID &uuid) {
         dyld_process_info_get_cache (process_info, &sc_info);
         if (sc_info.cacheBaseAddress != 0) {
           base_addr = sc_info.cacheBaseAddress;
-          uuid.SetBytes (sc_info.cacheUUID);
+          uuid = UUID::fromOptionalData(sc_info.cacheUUID, sizeof(uuid_t));
         }
         dyld_process_info_release (process_info);
       }
@@ -5757,20 +5764,29 @@ uint32_t ObjectFileMachO::GetSDKVersion(uint32_t *versions,
             m_sdk_versions.push_back(xxxx);
             m_sdk_versions.push_back(yy);
             m_sdk_versions.push_back(zz);
+            success = true;
+          } else {
+            GetModule()->ReportWarning(
+                "minimum OS version load command with invalid (0) version found.");
           }
-          success = true;
         }
       }
       offset = load_cmd_offset + lc.cmdsize;
     }
 
     if (success == false) {
-      // Push an invalid value so we don't keep trying to
+      // Push an invalid value so we don't try to find
+      // the version # again on the next call to this
+      // method.
       m_sdk_versions.push_back(UINT32_MAX);
     }
   }
 
-  if (m_sdk_versions.size() > 1 || m_sdk_versions[0] != UINT32_MAX) {
+  // Legitimate version numbers will have 3 entries pushed
+  // on to m_sdk_versions.  If we only have one value, it's
+  // the sentinel value indicating that this object file
+  // does not have a valid minimum os version #.
+  if (m_sdk_versions.size() > 1) {
     if (versions != NULL && num_versions > 0) {
       for (size_t i = 0; i < num_versions; ++i) {
         if (i < m_sdk_versions.size())
